@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 # Define placeholders for dataset paths
 CAMBRIAN_737K = {
@@ -51,6 +52,17 @@ def data_list(dataset_names):
             config = data_dict[dataset_name].copy()
             config["sampling_rate"] = sampling_rate
             config_list.append(config)
+        elif Path(dataset_name).is_file() and dataset_name.endswith((".json", ".jsonl")):
+            # Allow passing a direct annotation file path via --dataset_use.
+            # Use the annotation parent directory as default data_path for relative media paths.
+            dataset_path = Path(dataset_name).resolve()
+            config_list.append(
+                {
+                    "annotation_path": str(dataset_path),
+                    "data_path": str(dataset_path.parent),
+                    "sampling_rate": sampling_rate,
+                }
+            )
         else:
             raise ValueError(f"do not find {dataset_name}")
     return config_list
