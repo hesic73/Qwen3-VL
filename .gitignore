@@ -33,3 +33,5 @@ dist/
 */wandb/
 
 *.png
+
+qwen-vl-finetune/custom_tokenizer

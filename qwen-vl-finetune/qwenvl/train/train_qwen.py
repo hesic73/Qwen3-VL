@@ -134,9 +134,13 @@ def train(attn_implementation="flash_attention_2"):
         data_args.model_type = "qwen2vl"
 
     print(f'the initlized model is {model_args.model_name_or_path} the class is {model.__class__.__name__}')
-    processor = AutoProcessor.from_pretrained(
-        model_args.model_name_or_path,
-    )
+    processor = AutoProcessor.from_pretrained(model_args.model_name_or_path)
+    if model_args.tokenizer_path:
+        _custom_tok = transformers.AutoTokenizer.from_pretrained(
+            model_args.tokenizer_path, use_fast=True
+        )
+        processor.tokenizer = _custom_tok
+        rank0_print(f"Swapped processor tokenizer from {model_args.tokenizer_path} (vocab={len(_custom_tok)})")
 
     if data_args.data_flatten or data_args.data_packing:
         replace_qwen2_vl_attention_class()
@@ -153,7 +157,7 @@ def train(attn_implementation="flash_attention_2"):
             model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
+        model_args.tokenizer_path or model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",

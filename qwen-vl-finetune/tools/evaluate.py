@@ -39,13 +39,23 @@ def parse_args():
     parser.add_argument("--image_dir", required=True)
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--within_n", type=int, default=5)
+    parser.add_argument("--tokenizer_path", default=None, help="Custom tokenizer dir (e.g. ./custom_tokenizer for remapped tokens)")
     parser.add_argument("--compare_base", action="store_true", help="Also evaluate base model without LoRA")
     parser.add_argument("--plot_out", default="eval_result.png")
     return parser.parse_args()
 
 
 def extract_integer(text: str):
-    """Extract first integer in [0, 100] from model output. Returns None if not found."""
+    """Extract integer in [0, 100] from model output.
+    Handles both plain integers ('50') and remapped token format ('<AREA_50>').
+    """
+    # Remapped token format: <AREA_N> or <ACT_N>
+    m = re.search(r"<(?:AREA|ACT)_(\d{1,3})>", text.strip())
+    if m:
+        val = int(m.group(1))
+        if 0 <= val <= 100:
+            return val
+    # Plain integer fallback
     m = re.search(r"\b(\d{1,3})\b", text.strip())
     if m:
         val = int(m.group(1))
@@ -87,7 +97,8 @@ def predict(model, processor, messages):
     ).to(model.device)
     output_ids = model.generate(**inputs, max_new_tokens=16)
     new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-    return processor.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    # Don't skip special tokens: <AREA_N> is a special token in the remapped tokenizer
+    return processor.tokenizer.decode(new_tokens, skip_special_tokens=False).strip()
 
 
 def run_evaluation(model, processor, samples, image_dir, label=""):
@@ -183,6 +194,9 @@ def main():
         samples = samples[: args.max_samples]
 
     processor = AutoProcessor.from_pretrained(args.base_model)
+    if args.tokenizer_path:
+        from transformers import AutoTokenizer
+        processor.tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, use_fast=True)
     results_to_plot = []
 
     # --- Base model (optional) ---
