@@ -113,6 +113,47 @@ def build_tokenizer(base_model, output_dir):
     with open(tc_path, "w") as f:
         json.dump(tc, f, ensure_ascii=False, indent=2)
 
+    # Sync vocab.json (read by the slow tokenizer, use_fast=False)
+    vj_path = Path(output_dir) / "vocab.json"
+    if vj_path.exists():
+        with open(vj_path) as f:
+            vj = json.load(f)
+        vj_synced = {rename.get(k, k): v for k, v in vj.items()}
+        with open(vj_path, "w") as f:
+            json.dump(vj_synced, f, ensure_ascii=False, indent=2)
+        print(f"Synced vocab.json ({len(rename)} entries renamed)")
+
+    # Sync added_tokens.json (read by the slow tokenizer, use_fast=False)
+    aj_path = Path(output_dir) / "added_tokens.json"
+    if aj_path.exists():
+        with open(aj_path) as f:
+            aj = json.load(f)
+        for old_id, new_name in id2new.items():
+            aj[new_name] = old_id
+        with open(aj_path, "w") as f:
+            json.dump(aj, f, ensure_ascii=False, indent=2)
+        print(f"Synced added_tokens.json ({len(id2new)} new entries added)")
+
+    # Sync merges.txt (read by the slow tokenizer, use_fast=False)
+    mt_path = Path(output_dir) / "merges.txt"
+    if mt_path.exists():
+        with open(mt_path) as f:
+            lines = f.readlines()
+        kept_lines = []
+        for line in lines:
+            stripped = line.rstrip("\n")
+            if stripped.startswith("#") or " " not in stripped:
+                kept_lines.append(line)
+                continue
+            left, right = stripped.split(" ", 1)
+            if (left + right) in renamed_old_strings:
+                continue  # drop merge that produced a renamed token
+            kept_lines.append(line)
+        removed_mt = len(lines) - len(kept_lines)
+        with open(mt_path, "w") as f:
+            f.writelines(kept_lines)
+        print(f"Synced merges.txt (removed {removed_mt} merge rules)")
+
     print(f"Remapped IDs: {min(candidates)}..{max(candidates)}")
     print(f"Vocab size unchanged: {len(tj['model']['vocab'])}")
     print(f"Example: id={candidates[0]} renamed to {id2new[candidates[0]]!r}")

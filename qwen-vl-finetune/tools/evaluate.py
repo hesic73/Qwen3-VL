@@ -41,27 +41,52 @@ def parse_args():
     parser.add_argument("--within_n", type=int, default=5)
     parser.add_argument("--tokenizer_path", default=None, help="Custom tokenizer dir (e.g. ./custom_tokenizer for remapped tokens)")
     parser.add_argument("--compare_base", action="store_true", help="Also evaluate base model without LoRA")
+    parser.add_argument(
+        "--output_mode", default="special", choices=["special", "integer"],
+        help="(\'special\') expect <AREA_N> tokens from finetuned model; "
+             "(\'integer\') expect bare 0-100 integers from base/plain model",
+    )
+    parser.add_argument(
+        "--base_output_mode", default="integer", choices=["special", "integer"],
+        help="output_mode used when evaluating the base model (default: \'integer\')",
+    )
     parser.add_argument("--plot_out", default="eval_result.png")
     return parser.parse_args()
 
 
-def extract_integer(text: str):
-    """Extract integer in [0, 100] from model output.
-    Handles both plain integers ('50') and remapped token format ('<AREA_50>').
-    """
-    # Remapped token format: <AREA_N> or <ACT_N>
-    m = re.search(r"<(?:AREA|ACT)_(\d{1,3})>", text.strip())
-    if m:
-        val = int(m.group(1))
-        if 0 <= val <= 100:
-            return val
-    # Plain integer fallback
-    m = re.search(r"\b(\d{1,3})\b", text.strip())
+def extract_special_token(text: str):
+    """Strict: accept only <AREA_N> special tokens (0-100). Returns None for anything else."""
+    m = re.search(r"<AREA_(\d{1,3})>", text.strip())
     if m:
         val = int(m.group(1))
         if 0 <= val <= 100:
             return val
     return None
+
+
+def extract_plain_int(text: str):
+    """Strict: accept only a bare integer in [0, 100]. Returns None for anything else."""
+    m = re.fullmatch(r"\s*(\d{1,3})\s*", text.strip())
+    if m:
+        val = int(m.group(1))
+        if 0 <= val <= 100:
+            return val
+    return None
+
+
+def make_extractor(output_mode: str):
+    """Return the right extraction function for the specified output_mode.
+
+    output_mode choices:
+      'special'  – expect <AREA_N> tokens (finetuned with remapped tokenizer)
+      'integer'  – expect a bare integer 0-100 (base model / plain prompting)
+    """
+    if output_mode == "special":
+        return extract_special_token
+    elif output_mode == "integer":
+        return extract_plain_int
+    else:
+        raise ValueError(f"Unknown output_mode {output_mode!r}. Choose 'special' or 'integer'.")
 
 
 def build_messages(item, image_dir: Path):
@@ -101,15 +126,18 @@ def predict(model, processor, messages):
     return processor.tokenizer.decode(new_tokens, skip_special_tokens=False).strip()
 
 
-def run_evaluation(model, processor, samples, image_dir, label=""):
+def run_evaluation(model, processor, samples, image_dir, label="", output_mode="special"):
+    extractor = make_extractor(output_mode)
+    # GT is always in <AREA_N> format in the dataset
+    gt_extractor = extract_special_token
     preds, gts, invalid = [], [], []
     for item in tqdm(samples, desc=label):
         gt_text = next(t["value"] for t in item["conversations"] if t["from"] != "human")
-        gt = extract_integer(gt_text)
+        gt = gt_extractor(gt_text)
         if gt is None:
             continue
         raw = predict(model, processor, build_messages(item, image_dir))
-        pred = extract_integer(raw)
+        pred = extractor(raw)
         if pred is None:
             invalid.append(raw)
         else:
@@ -206,8 +234,8 @@ def main():
             args.base_model, torch_dtype=torch.bfloat16, device_map="auto"
         )
         base_model.eval()
-        preds, gts, invalid = run_evaluation(base_model, processor, samples, image_dir, label="Base")
-        m = print_metrics(preds, gts, invalid, len(samples), args.within_n, label="Base Model")
+        preds, gts, invalid = run_evaluation(base_model, processor, samples, image_dir, label="Base", output_mode=args.base_output_mode)
+        m = print_metrics(preds, gts, invalid, len(samples), args.within_n, label=f"Base Model [{args.base_output_mode}]")
         if m:
             results_to_plot.append(("Base Model", m))
         del base_model
@@ -220,8 +248,8 @@ def main():
     )
     model = PeftModel.from_pretrained(model, args.model_path)
     model.eval()
-    preds, gts, invalid = run_evaluation(model, processor, samples, image_dir, label="Finetuned")
-    m = print_metrics(preds, gts, invalid, len(samples), args.within_n, label="Finetuned")
+    preds, gts, invalid = run_evaluation(model, processor, samples, image_dir, label="Finetuned", output_mode=args.output_mode)
+    m = print_metrics(preds, gts, invalid, len(samples), args.within_n, label=f"Finetuned [{args.output_mode}]")
     if m:
         results_to_plot.append(("Finetuned", m))
 
