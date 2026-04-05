@@ -6,15 +6,13 @@ Usage:
     python tools/evaluate.py \
         --model_path ./output/qwen3vl_lora_run/checkpoint-xxx \
         --base_model Qwen/Qwen3-VL-4B-Instruct \
-        --test_file /path/to/test.jsonl \
-        --image_dir /path/to/images
+        --test_file /path/to/test.jsonl
 
     # Compare finetuned vs base model
     python tools/evaluate.py \
         --model_path ./output/qwen3vl_lora_run/checkpoint-xxx \
         --base_model Qwen/Qwen3-VL-4B-Instruct \
         --test_file /path/to/test.jsonl \
-        --image_dir /path/to/images \
         --compare_base
 """
 
@@ -36,7 +34,6 @@ def parse_args():
     parser.add_argument("--model_path", required=True, help="Path to LoRA checkpoint dir")
     parser.add_argument("--base_model", default="Qwen/Qwen3-VL-4B-Instruct")
     parser.add_argument("--test_file", required=True)
-    parser.add_argument("--image_dir", required=True)
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--within_n", type=int, default=5)
     parser.add_argument("--tokenizer_path", default=None, help="Custom tokenizer dir (e.g. ./custom_tokenizer for remapped tokens)")
@@ -51,6 +48,7 @@ def parse_args():
         help="output_mode used when evaluating the base model (default: \'integer\')",
     )
     parser.add_argument("--plot_out", default="eval_result.png")
+    parser.add_argument("--lora", action="store_true", help="Load finetuned model as a LoRA adapter (default: full finetune)")
     return parser.parse_args()
 
 
@@ -214,7 +212,7 @@ def plot_results(results_list, within_n, plot_out):
 
 def main():
     args = parse_args()
-    image_dir = Path(args.image_dir)
+    image_dir = Path(args.test_file).parent  # Assume images are in the same dir as test_file
 
     with open(args.test_file) as f:
         samples = [json.loads(l) for l in f]
@@ -243,10 +241,15 @@ def main():
 
     # --- Finetuned model ---
     print(f"\nLoading finetuned model: {args.model_path}")
-    model = Qwen3VLForConditionalGeneration.from_pretrained(
-        args.base_model, torch_dtype=torch.bfloat16, device_map="auto"
-    )
-    model = PeftModel.from_pretrained(model, args.model_path)
+    if args.lora:
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            args.base_model, torch_dtype=torch.bfloat16, device_map="auto"
+        )
+        model = PeftModel.from_pretrained(model, args.model_path)
+    else:
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            args.model_path, torch_dtype=torch.bfloat16, device_map="auto"
+        )
     model.eval()
     preds, gts, invalid = run_evaluation(model, processor, samples, image_dir, label="Finetuned", output_mode=args.output_mode)
     m = print_metrics(preds, gts, invalid, len(samples), args.within_n, label=f"Finetuned [{args.output_mode}]")

@@ -10,11 +10,15 @@
 
 export NPROC_PER_NODE=1
 
+GPU_ID=$(bash scripts/find_gpu.sh)
+echo "Using GPU: ${GPU_ID}"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
+
 deepspeed=./scripts/zero3_offload.json
 
 llm="Qwen/Qwen3-VL-4B-Instruct"
 custom_tokenizer="./custom_tokenizer"
-datasets="/home/hsc/26spring/wave_sheet_real/data/my_qwen_dataset/annotations.jsonl"
+datasets="/data2/sichenghe/26spring/my_qwen_dataset/annotations.jsonl"
 output_dir="./output/qwen3vl_lora_remapped"
 
 

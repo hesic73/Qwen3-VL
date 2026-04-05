@@ -1,0 +1,35 @@
+name: qwen-vl-finetune
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24.0
+  - pip:
+    - --extra-index-url https://download.pytorch.org/whl/cu118
+    - torch
+    - torchvision
+    # Core training stack (4.57.0.dev0 from README became stable 4.57.1)
+    - transformers==4.57.1
+    - deepspeed==0.17.1
+    - accelerate==1.7.0
+    - peft==0.17.1
+    # Attention kernels (pre-built wheel to avoid source compilation requiring torch at build time)
+    - https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
+    - triton==3.2.0
+    # Video decoding
+    - torchcodec==0.2
+    - av
+    # Qwen VL utilities (local editable install from repo)
+    - -e ./qwen-vl-utils
+    # General ML utilities
+    - numpy
+    - pillow
+    - packaging
+    - requests
+    - sentencepiece
+    - tokenizers>=0.19
+    - einops
+    - tqdm
+    - wandb
+    - matplotlib
