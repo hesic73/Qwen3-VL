@@ -11,8 +11,8 @@ deepspeed=./scripts/zero2.json
 
 llm="Qwen/Qwen3-VL-2B-Instruct"
 custom_tokenizer="./custom_tokenizer"
-datasets="/data2/sichenghe/26spring/my_qwen_dataset/annotations.jsonl"
-output_dir="./output/qwen3vl_2b_full_ft_remapped"
+datasets="/data2/sichenghe/26spring/data/qwen_dataset_20260405/annotations.jsonl"
+output_dir="./output/qwen3vl_2b_full_ft_special"
 
 
 torchrun --nproc_per_node=${NPROC_PER_NODE} \
@@ -41,5 +41,5 @@ torchrun --nproc_per_node=${NPROC_PER_NODE} \
     --model_max_length 1024 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
-    --run_name "qwen3vl-2b-full-ft-remapped-tokens" \
+    --run_name "qwen3vl-2b-full-ft-special" \
     --report_to "wandb"

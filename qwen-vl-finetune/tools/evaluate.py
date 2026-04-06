@@ -6,7 +6,6 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
-from peft import PeftModel
 from qwen_vl_utils import process_vision_info
 from tqdm import tqdm
 
@@ -14,7 +13,6 @@ from tqdm import tqdm
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", required=True, help="Path to checkpoint dir")
-    parser.add_argument("--base_model", default=None, help="Path to base model (required for LoRA or compare_base)")
     parser.add_argument("--dataset_path", required=True, help="Path to evaluation dataset jsonl file")
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--within_n", type=int, default=5)
@@ -23,12 +21,8 @@ def parse_args():
         "--label_format", choices=["special", "integer"], required=True,
     )
     parser.add_argument("--plot_out", default="eval_result.png")
-    parser.add_argument("--lora", action="store_true", help="Load finetuned model as a LoRA adapter")
     
-    args = parser.parse_args()
-    if args.lora and not args.base_model:
-        parser.error("--base_model is required when using --lora")
-    return args
+    return parser.parse_args()
 
 
 def extract_special_token(text: str):
@@ -41,7 +35,7 @@ def extract_special_token(text: str):
 
 
 def extract_plain_int(text: str):
-    m = re.fullmatch(r"\s*(\d{1,3})\s*", text.strip())
+    m = re.search(r"(\d{1,3})", text.strip())
     if m:
         val = int(m.group(1))
         if 0 <= val <= 100:
@@ -91,7 +85,7 @@ def predict(model, processor, messages):
     ).to(model.device)
     output_ids = model.generate(**inputs, max_new_tokens=16)
     new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-    return processor.tokenizer.decode(new_tokens, skip_special_tokens=False).strip()
+    return processor.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
 def run_evaluation(model, processor, samples, image_dir, label="", label_format="special"):
@@ -122,6 +116,8 @@ def print_metrics(preds, gts, invalid, n_total, within_n, label=""):
     print(f"Total:           {n_total}")
     print(f"Valid outputs:   {n_valid} ({100*n_valid/n_total:.1f}% success rate)")
     print(f"Invalid outputs: {n_invalid} ({100*n_invalid/n_total:.1f}%)")
+    if invalid:
+        print(f"Sample invalid outputs:\n" + "\n".join([repr(o) for o in invalid[:3]]))
     if n_valid == 0:
         return None
     errors = [abs(p - g) for p, g in zip(preds, gts)]
@@ -131,8 +127,6 @@ def print_metrics(preds, gts, invalid, n_total, within_n, label=""):
     print(f"MAE:             {mae:.2f}")
     print(f"Exact match:     {100*exact:.1f}%")
     print(f"Within-{within_n}:      {100*within:.1f}%")
-    if invalid:
-        print(f"Sample invalid outputs: {[repr(o) for o in invalid[:3]]}")
     return {"errors": errors, "mae": mae, "exact": exact, "within": within, "preds": preds, "gts": gts}
 
 
@@ -178,8 +172,7 @@ def main():
     if args.max_samples:
         samples = samples[: args.max_samples]
 
-    processor_path = args.base_model if args.base_model else args.model_path
-    processor = AutoProcessor.from_pretrained(processor_path)
+    processor = AutoProcessor.from_pretrained(args.model_path)
     
     if args.tokenizer_path:
         from transformers import AutoTokenizer
@@ -189,15 +182,9 @@ def main():
 
 
     print(f"\nLoading finetuned model: {args.model_path}")
-    if args.lora:
-        model = Qwen3VLForConditionalGeneration.from_pretrained(
-            args.base_model, torch_dtype=torch.bfloat16, device_map="auto"
-        )
-        model = PeftModel.from_pretrained(model, args.model_path)
-    else:
-        model = Qwen3VLForConditionalGeneration.from_pretrained(
-            args.model_path, torch_dtype=torch.bfloat16, device_map="auto"
-        )
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
+        args.model_path, torch_dtype=torch.bfloat16, device_map="auto"
+    )
     model.eval()
     
     preds, gts, invalid = run_evaluation(model, processor, samples, image_dir, label="Finetuned", label_format=args.label_format)
