@@ -1,4 +1,5 @@
 #!/bin/bash
+# Full fine-tuning script for Qwen3-VL-2B (Original Tokenizer).
 
 export NPROC_PER_NODE=1
 
@@ -6,12 +7,12 @@ GPU_ID=$(bash scripts/find_gpu.sh)
 echo "Using GPU: ${GPU_ID}"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
-deepspeed=./scripts/zero3_offload.json
 
-llm="Qwen/Qwen3-VL-4B-Instruct"
+deepspeed=./scripts/zero2.json
 
-datasets="/home/hsc/26spring/wave_sheet_real/data/my_qwen_dataset/annotations.jsonl"
-output_dir="./output/qwen3vl_lora_run"
+llm="Qwen/Qwen3-VL-2B-Instruct"
+datasets="/data2/sichenghe/26spring/data/qwen_dataset_20260405_numbers/annotations.jsonl"
+output_dir="./output/qwen3vl_2b_full_ft"
 
 
 torchrun --nproc_per_node=${NPROC_PER_NODE} \
@@ -20,7 +21,9 @@ torchrun --nproc_per_node=${NPROC_PER_NODE} \
     --model_name_or_path "${llm}" \
     --dataset_use ${datasets} \
     --data_flatten True \
-    --lora_enable True \
+    --tune_mm_llm True \
+    --tune_mm_mlp True \
+    --tune_mm_vision False \
     --bf16 \
     --output_dir ${output_dir} \
     --num_train_epochs 3 \
@@ -29,13 +32,13 @@ torchrun --nproc_per_node=${NPROC_PER_NODE} \
     --eval_strategy "no" \
     --save_strategy "epoch" \
     --save_total_limit 2 \
-    --learning_rate 5e-5 \
+    --learning_rate 1e-5 \
     --weight_decay 0 \
     --max_grad_norm 1 \
-    --lr_scheduler_type "linear" \
+    --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --model_max_length 1024 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
-    --run_name "qwen3vl-lora-rl-data" \
+    --run_name "qwen3vl-2b-full-ft" \
     --report_to "wandb"

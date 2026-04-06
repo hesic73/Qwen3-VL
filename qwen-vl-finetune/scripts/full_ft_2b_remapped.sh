@@ -1,6 +1,5 @@
 #!/bin/bash
 # Full fine-tuning script for Qwen3-VL-2B using remapped <ACT_i> / <AREA_i> tokens.
-# Same as debug_remapped.sh but: 2B model, no LoRA, full parameter tuning.
 
 export NPROC_PER_NODE=1
 
