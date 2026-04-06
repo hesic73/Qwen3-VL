@@ -120,6 +120,7 @@ def print_metrics(preds, gts, invalid, n_total, within_n, label=""):
     print(f"\n{'='*50}")
     print(f"[{label}]")
     print(f"Total:           {n_total}")
+    print(f"Valid outputs:   {n_valid} ({100*n_valid/n_total:.1f}% success rate)")
     print(f"Invalid outputs: {n_invalid} ({100*n_invalid/n_total:.1f}%)")
     if n_valid == 0:
         return None
