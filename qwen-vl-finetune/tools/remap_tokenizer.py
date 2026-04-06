@@ -1,20 +1,3 @@
-"""
-Remap 202 least-frequent tokens in the Qwen3 tokenizer to:
-  <ACT_0>..<ACT_100>  (101 tokens, for action values)
-  <AREA_0>..<AREA_100> (101 tokens, for area/coverage output)
-
-Strategy: take the 202 highest-numbered regular tokens (which BPE assigned last =
-least frequent) and rename them in-place in tokenizer.json.
-Vocab size stays UNCHANGED - no model resize needed.
-
-Usage:
-    python tools/remap_tokenizer.py \
-        --base_model Qwen/Qwen3-VL-4B-Instruct \
-        --output_dir ./custom_tokenizer
-
-    python tools/remap_tokenizer.py --verify --output_dir ./custom_tokenizer
-"""
-
 import argparse
 import json
 import shutil
