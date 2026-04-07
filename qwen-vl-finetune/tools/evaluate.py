@@ -85,7 +85,7 @@ def predict(model, processor, messages):
     ).to(model.device)
     output_ids = model.generate(**inputs, max_new_tokens=16)
     new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-    return processor.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    return processor.tokenizer.decode(new_tokens, skip_special_tokens=False).strip()
 
 
 def run_evaluation(model, processor, samples, image_dir, label="", label_format="special"):
